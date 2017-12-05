@@ -1,0 +1,23 @@
+<resources>
+    <string name="email_developer">herman.whyd@gmail.com</string>
+    <string name="app_name">Movie Updates</string>
+    <string name="title_popular">Popular</string>
+    <string name="title_top_rated">Top Rated</string>
+    <string name="title_upcoming">Upcoming</string>
+    <string name="title_now_playing">Now Playing</string>
+    <string name="title_favorite">Favorite</string>
+    <string name="title_airing_today">Airing Today</string>
+    <string name="title_on_tv">On TV</string>
+    <string name="menu_share">Share</string>
+    <string name="search">Search</string>
+    <string name="search_hint">Search</string>
+
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+
+    <string name="action_settings">Settings</string>
+    <string name="title_activity_main">Movie Updates</string>
+    <string name="title_activity_detail_movie">Movie Detail</string>
+    <string name="title_activity_detail_cast">Cast Detail</string>
+    <string name="title_activity_detail_shows">Show Detail</string>
+</resources>

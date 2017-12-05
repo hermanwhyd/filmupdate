@@ -1,0 +1,746 @@
+package id.hw.labs.movieupdate.fragments;
+
+
+import android.app.SearchManager;
+import android.content.Context;
+import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.design.widget.BottomNavigationView;
+import android.support.v4.app.Fragment;
+import android.support.v4.view.MenuItemCompat;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.SearchView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import id.hw.labs.movieupdate.R;
+import id.hw.labs.movieupdate.activities.DetailMovieActivity;
+import id.hw.labs.movieupdate.adapter.FavoriteAdapter;
+import id.hw.labs.movieupdate.adapter.MovieAdapter;
+import id.hw.labs.movieupdate.adapter.SearchAdapter;
+import id.hw.labs.movieupdate.database.DBHelper;
+import id.hw.labs.movieupdate.model.Genre;
+import id.hw.labs.movieupdate.model.GenreList;
+import id.hw.labs.movieupdate.model.Movie;
+import id.hw.labs.movieupdate.model.MovieList;
+import id.hw.labs.movieupdate.utils.ApiClient;
+import id.hw.labs.movieupdate.utils.ApiInterface;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class MovieFragment extends Fragment implements MovieAdapter.OnItemClickListener {
+    private static final String TYPE_OF = "movie";
+    private static final String TYPE_NOW_PLAYING = "now_playing";
+    private static final String TYPE_UPCOMING = "upcoming";
+    private static final String TYPE_POPULAR = "popular";
+    private static final String TYPE_TOP_RATED = "top_rated";
+    private static final String TYPE_FAVORITE = "favorite";
+
+    private RecyclerView recyclerView;
+    private MovieAdapter adapter;
+    private List<Movie> movieList = new ArrayList<>();
+    private ProgressBar progress;
+    private DBHelper dbHelper;
+    private TextView txtSearch, txtNoResult;
+    private int currentPage = 1;
+    private String type = TYPE_NOW_PLAYING;
+    private Call<MovieList> call = null;
+    private LinearLayoutManager linearLayoutManager;
+    private GridLayoutManager gridLayoutManager;
+
+    public MovieFragment() {}
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.activity_movie,container,false);
+    }
+
+    @Override
+    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        getActivity().setTitle("Movie");
+        setHasOptionsMenu(true);
+        BottomNavigationView navigation = (BottomNavigationView) view.findViewById(R.id.navigation);
+        navigation.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener);
+
+        recyclerView = (RecyclerView) view.findViewById(R.id.recycler_view);
+        linearLayoutManager = new LinearLayoutManager(getContext());
+        gridLayoutManager = new GridLayoutManager(getContext(),2);
+        recyclerView.setLayoutManager(gridLayoutManager);
+        adapter = new MovieAdapter(movieList);
+        adapter.setOnItemClickListener(this);
+        recyclerView.setAdapter(adapter);
+        setRecyclerViewScrollListener();
+
+        progress = (ProgressBar) view.findViewById(R.id.progress);
+        dbHelper = new DBHelper(getContext());
+        txtSearch = (TextView) view.findViewById(R.id.query);
+        txtNoResult = (TextView) view.findViewById(R.id.no_search);
+
+        getMovie();
+        initGenre();
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        inflater.inflate(R.menu.search,menu);
+        SearchManager searchManager = (SearchManager) getActivity().getSystemService(Context.SEARCH_SERVICE);
+        MenuItem searchItem = menu.findItem(R.id.search);
+        SearchView searchView = (SearchView) searchItem.getActionView();
+        searchView.setSearchableInfo(searchManager.getSearchableInfo(getActivity().getComponentName()));
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                if(newText.length()>0){
+                    getSearch(newText);
+                }
+                return true;
+            }
+        });
+
+        MenuItemCompat.setOnActionExpandListener(searchItem, new MenuItemCompat.OnActionExpandListener() {
+            @Override
+            public boolean onMenuItemActionExpand(MenuItem item) {
+                return true;
+            }
+
+            @Override
+            public boolean onMenuItemActionCollapse(MenuItem item) {
+                if(recyclerView.getLayoutManager()==linearLayoutManager) {
+                    txtSearch.setVisibility(View.GONE);
+                    txtNoResult.setVisibility(View.GONE);
+                    recyclerView.setAdapter(null);
+                    currentPage = 1;
+                    getMovie();
+                }
+                return true;
+            }
+        });
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+
+    private void getMovie(){
+        ApiInterface apiInterface = ApiClient.getRetrofit().create(ApiInterface.class);
+        switch (type) {
+            case TYPE_POPULAR:
+                call = apiInterface.getPopular(currentPage);
+                break;
+            case TYPE_TOP_RATED:
+                call = apiInterface.getTopRated(currentPage);
+                break;
+            case TYPE_UPCOMING:
+                call = apiInterface.getUpcoming(currentPage);
+                break;
+            case TYPE_NOW_PLAYING:
+                call = apiInterface.getNowPlaying(currentPage);
+                break;
+            case TYPE_FAVORITE:
+                if(recyclerView.getLayoutManager() == linearLayoutManager) recyclerView.setLayoutManager(gridLayoutManager);
+                recyclerView.setAdapter(new FavoriteAdapter(getContext()));
+                return;
+        }
+
+        progress.setVisibility(View.VISIBLE);
+        call.enqueue(new Callback<MovieList>() {
+            @Override
+            public void onResponse(Call<MovieList> call, Response<MovieList> response) {
+                progress.setVisibility(View.GONE);
+                MovieList movieList = response.body();
+                if(recyclerView.getLayoutManager() == linearLayoutManager) recyclerView.setLayoutManager(gridLayoutManager);
+                if(currentPage==1){
+                    adapter = new MovieAdapter(movieList.getMovies());
+                    adapter.setOnItemClickListener(MovieFragment.this);
+                    recyclerView.setAdapter(adapter);
+                } else {
+                    adapter.addMovieList(movieList.getMovies());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<MovieList> call, Throwable t) {
+                progress.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    private BottomNavigationView.OnNavigationItemSelectedListener mOnNavigationItemSelectedListener
+            = new BottomNavigationView.OnNavigationItemSelectedListener() {
+
+        @Override
+        public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+            int id = item.getItemId();
+            txtSearch.setVisibility(View.GONE);
+            txtNoResult.setVisibility(View.GONE);
+            currentPage=1;
+
+            if(id==R.id.popular){
+                if(type.equals(TYPE_POPULAR) && recyclerView.getLayoutManager() != linearLayoutManager) return false;
+                type = TYPE_POPULAR;
+            } else if(id==R.id.top_rated) {
+                if(type.equals(TYPE_TOP_RATED) && recyclerView.getLayoutManager() != linearLayoutManager) return false;
+                type = TYPE_TOP_RATED;
+            } else if(id==R.id.upcoming) {
+                if(type.equals(TYPE_UPCOMING) && recyclerView.getLayoutManager() != linearLayoutManager) return false;
+                type = TYPE_UPCOMING;
+            } else if(id==R.id.now_playing) {
+                if(type.equals(TYPE_NOW_PLAYING) && recyclerView.getLayoutManager() != linearLayoutManager) return false;
+                type = TYPE_NOW_PLAYING;
+            } else if(id==R.id.favorite) {
+                if(type.equals(TYPE_FAVORITE) && recyclerView.getLayoutManager() != linearLayoutManager) return false;
+                type = TYPE_FAVORITE;
+            } else {
+                return false;
+            }
+            getMovie();
+            return true;
+        }
+
+    };
+
+    private void initGenre(){
+        ApiInterface apiInterface = ApiClient.getRetrofit().create(ApiInterface.class);
+        Call<GenreList> call = apiInterface.getGenre(TYPE_OF);
+
+        call.enqueue(new Callback<GenreList>() {
+            @Override
+            public void onResponse(Call<GenreList> call, Response<GenreList> response) {
+                List<Genre> list = response.body().getGenres();
+                for (Genre g:list) {
+                    if(!dbHelper.isGenre(g.getId())){
+                        dbHelper.addGenre(g.getId(),g.getName());
+                    }
+                }
+                dbHelper.close();
+            }
+
+            @Override
+            public void onFailure(Call<GenreList> call, Throwable t) {
+
+            }
+        });
+    }
+
+    public void getSearch(String query) {
+        currentPage = 1;
+        txtNoResult.setVisibility(View.GONE);
+        recyclerView.setAdapter(null);
+        recyclerView.setLayoutManager(linearLayoutManager);
+        txtSearch.setVisibility(View.VISIBLE);
+        txtSearch.setText("Result for: \""+query+"\"");
+        progress.setVisibility(View.VISIBLE);
+        ApiInterface apiInterface = ApiClient.getRetrofit().create(ApiInterface.class);
+        Call<MovieList> call = apiInterface.getSearch(query);
+        call.enqueue(new Callback<MovieList>() {
+            @Override
+            public void onResponse(Call<MovieList> call, Response<MovieList> response) {
+                progress.setVisibility(View.GONE);
+                if(response.body().getMovies().size()==0){
+                    txtNoResult.setVisibility(View.VISIBLE);
+                } else {
+                    txtNoResult.setVisibility(View.GONE);
+                    recyclerView.setAdapter(new SearchAdapter(response.body().getMovies(),getContext()));
+                }
+            }
+
+            @Override
+            public void onFailure(Call<MovieList> call, Throwable t) {
+
+            }
+        });
+    }
+
+    private void setRecyclerViewScrollListener(){
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+                int totalItem = recyclerView.getLayoutManager().getItemCount();
+                if(totalItem == gridLayoutManager.findLastVisibleItemPosition()+1
+                        && recyclerView.getLayoutManager()==gridLayoutManager
+                        && !type.equals(TYPE_FAVORITE)) {
+                    currentPage+=1;
+                    getMovie();
+                }
+            }
+        });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if(type.equals(TYPE_FAVORITE) && recyclerView.getLayoutManager() == gridLayoutManager) {
+            recyclerView.setAdapter(new FavoriteAdapter(getContext()));
+        }
+    }
+
+    @Override
+    public void onItemClick(View view, Movie movie) {
+        DetailMovieActivity.navigate(getContext(), view.findViewById(R.id.movie_poster), movie);
+    }
+}
+
+
+
+
+
+
+
+
+--------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package id.hw.labs.movieupdate.adapter;
+
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+import java.util.List;
+
+import id.hw.labs.movieupdate.R;
+import id.hw.labs.movieupdate.model.Movie;
+import id.hw.labs.movieupdate.utils.ApiInterface;
+import it.sephiroth.android.library.picasso.Picasso;
+
+/**
+ * Created by Pad on 8/5/2017.
+ */
+
+public class MovieAdapter extends RecyclerView.Adapter<MovieAdapter.MovieHolder> implements View.OnClickListener {
+    private List<Movie> movieList;
+    private OnItemClickListener onItemClickListener;
+
+    public MovieAdapter(List<Movie> movieList) {
+        this.movieList = movieList;
+    }
+
+    public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
+        this.onItemClickListener = onItemClickListener;
+    }
+
+    @Override
+    public MovieHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_movie,parent,false);
+        view.setOnClickListener(this);
+
+        return new MovieHolder(view);
+    }
+
+    @Override
+    public void onBindViewHolder(final MovieHolder holder, final int position) {
+        final Movie movie = movieList.get(position);
+        holder.itemView.setTag(movie);
+        Picasso.with(holder.itemView.getContext())
+                .load(ApiInterface.BASE_IMG_MED + movie.getPosterPath())
+                .placeholder(R.drawable.poster_placeholder)
+                .fit()
+                .centerCrop()
+                .into(holder.moviePoster);
+        holder.title.setText(movie.getTitle());
+        holder.title.setSelected(true);
+        holder.rate.setText(String.valueOf(movie.getVoteAverage()));
+    }
+
+    @Override
+    public int getItemCount() {
+        return movieList.size();
+    }
+
+    public void addMovieList(List<Movie> movieList) {
+        this.movieList.addAll(movieList);
+        notifyDataSetChanged();
+    }
+
+    public void setMovieList(List<Movie> movieList) {
+        this.movieList = movieList;
+        notifyDataSetChanged();
+    }
+
+    @Override
+    public void onClick(View v) {
+        onItemClickListener.onItemClick(v, (Movie) v.getTag());
+    }
+
+    class MovieHolder extends RecyclerView.ViewHolder{
+        ImageView moviePoster;
+        TextView title, rate;
+        public MovieHolder(View itemView) {
+            super(itemView);
+            moviePoster = (ImageView) itemView.findViewById(R.id.movie_poster);
+            title = (TextView) itemView.findViewById(R.id.title);
+            rate = (TextView) itemView.findViewById(R.id.rate);
+        }
+    }
+
+    public interface OnItemClickListener {
+        void onItemClick(View view, Movie movie);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+---------------------------
+
+
+
+package id.hw.labs.movieupdate.activities;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.design.widget.CollapsingToolbarLayout;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.view.ViewCompat;
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.graphics.Palette;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.Toolbar;
+import android.text.Html;
+import android.transition.Slide;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
+import com.google.gson.GsonBuilder;
+import id.hw.labs.movieupdate.R;
+
+import java.util.List;
+
+import id.hw.labs.movieupdate.adapter.CastAdapter;
+import id.hw.labs.movieupdate.adapter.ReviewAdapter;
+import id.hw.labs.movieupdate.adapter.TrailerAdapter;
+import id.hw.labs.movieupdate.database.DBHelper;
+import id.hw.labs.movieupdate.model.Cast;
+import id.hw.labs.movieupdate.model.CastList;
+import id.hw.labs.movieupdate.model.Movie;
+import id.hw.labs.movieupdate.model.Review;
+import id.hw.labs.movieupdate.model.ReviewList;
+import id.hw.labs.movieupdate.model.Trailer;
+import id.hw.labs.movieupdate.model.TrailerList;
+import id.hw.labs.movieupdate.utils.ApiClient;
+import id.hw.labs.movieupdate.utils.ApiInterface;
+import id.hw.labs.movieupdate.utils.GsonUtil;
+import id.hw.labs.movieupdate.utils.Util;
+import it.sephiroth.android.library.picasso.Picasso;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class DetailMovieActivity extends AppCompatActivity {
+    private static final String POSTER_TRANSITION = "POSTER_TRANSITION";
+    private static final String EXTRA_MOVIE = "movie";
+
+    private CollapsingToolbarLayout collapsingToolbar;
+    private ImageView imgPoster;
+    private RecyclerView trailerView, reviewView, castView;
+    private List<Trailer> trailerList;
+    private List<Review> reviewList;
+    private List<Cast> castList;
+    private ProgressBar pbTrailers, pbReviews, pbCast;
+    private FloatingActionButton fab;
+    private Movie movie;
+    private DBHelper mDbHelper;
+
+    public static void navigate(Context ctx, View transitionImage, Movie movie) {
+        Intent intent = new Intent(ctx, DetailMovieActivity.class);
+        intent.putExtra(EXTRA_MOVIE, GsonUtil.getInstance().toJson(movie, Movie.class));
+
+        ActivityOptionsCompat options = ActivityOptionsCompat.makeSceneTransitionAnimation((Activity)ctx, transitionImage, POSTER_TRANSITION);
+        ActivityCompat.startActivity(ctx, intent, options.toBundle());
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_detail_movie);
+
+        initActivityTransitions();
+
+        ViewCompat.setTransitionName(findViewById(R.id.poster), POSTER_TRANSITION);
+        supportPostponeEnterTransition();
+
+        //Set toolbar
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
+        ActionBar actionBar = getSupportActionBar();
+        actionBar.setDisplayHomeAsUpEnabled(true);
+
+        // Binding
+        collapsingToolbar = (CollapsingToolbarLayout) findViewById(R.id.toolbar_layout);
+        ImageView imgHeader = (ImageView) findViewById(R.id.backdrop);
+        imgPoster = (ImageView) findViewById(R.id.poster);
+        TextView txtTitle = (TextView) findViewById(R.id.title);
+        TextView txtOverview = (TextView) findViewById(R.id.overview);
+        TextView txtDate = (TextView) findViewById(R.id.date);
+        TextView txtGenre = (TextView) findViewById(R.id.genre);
+        trailerView = (RecyclerView) findViewById(R.id.trailer);
+        reviewView = (RecyclerView) findViewById(R.id.reviews);
+        castView = (RecyclerView) findViewById(R.id.casts);
+        pbTrailers = (ProgressBar) findViewById(R.id.pb_trailers);
+        pbReviews = (ProgressBar) findViewById(R.id.pb_reviews);
+        pbCast = (ProgressBar) findViewById(R.id.pb_cast);
+        trailerView.setNestedScrollingEnabled(false);
+        reviewView.setNestedScrollingEnabled(false);
+        castView.setNestedScrollingEnabled(false);
+        fab = (FloatingActionButton) findViewById(R.id.fab_yes);
+
+        //setup sqlite
+        mDbHelper = new DBHelper(this);
+
+        // Get intent
+        Intent i = getIntent();
+        movie = new GsonBuilder().create().fromJson(i.getStringExtra(EXTRA_MOVIE), Movie.class);
+        collapsingToolbar.setTitle(movie.getTitle());
+        collapsingToolbar.setExpandedTitleColor(Util.getColor(this, android.R.color.transparent));
+        Picasso.with(this)
+                .load(ApiInterface.BASE_IMG_URL + movie.getPosterPath())
+                .placeholder(R.drawable.poster_placeholder)
+                .into(imgPoster);
+        Picasso.with(this)
+                .load(ApiInterface.BASE_BACK_URL + movie.getBackdropPath())
+                .placeholder(R.drawable.poster_placeholder)
+                .into(imgHeader, new it.sephiroth.android.library.picasso.Callback() {
+                    @Override
+                    public void onSuccess() {
+                        Bitmap bitmap = ((BitmapDrawable) imgPoster.getDrawable()).getBitmap();
+                        Palette.from(bitmap).generate(new Palette.PaletteAsyncListener() {
+                            public void onGenerated(Palette palette) {
+                                applyPalette(palette);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError() {}
+                });
+
+        String title = (movie.getTitle().equals(movie.getOriginalTitle()))? "<b>"+movie.getTitle()+"</b>" : "<b>"+movie.getTitle()+"</b><br><i>("+movie.getOriginalTitle()+")</i>";
+        txtTitle.setText(Util.getHtmlSpan(title));
+        txtDate.setText(movie.getReleaseDate().split("-")[0] + " \u25CF " + String.valueOf(movie.getVoteAverage()));
+        txtGenre.setText(mDbHelper.getGenre(movie.getGenreIds()));
+
+        String overview = (movie.getOverview().equals(""))? "No synopsis found" : movie.getOverview();
+        txtOverview.setText(overview);
+        trailerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        castView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        reviewView.setLayoutManager(new LinearLayoutManager(this));
+
+        loadJSON();
+
+        // FAB (favorite/unfaforite)
+        cekFavorite();
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if(mDbHelper.isFavorite(movie.getId())) {
+                    mDbHelper.deleteFavorite(movie.getId());
+                    Snackbar.make(view, "Removed from favorite lists", Snackbar.LENGTH_SHORT).setAction("Action", null).show();
+                    fab.setImageResource(R.drawable.ic_fav_no);
+                } else {
+                    fab.setImageResource(R.drawable.ic_fav_yes);
+                    mDbHelper.addFavorite(movie.getId(),new GsonBuilder().create().toJson(movie));
+                    Snackbar.make(view, "Added to favorite lists", Snackbar.LENGTH_SHORT).setAction("Action", null).show();
+                }
+            }
+        });
+
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent motionEvent) {
+        try {
+            return super.dispatchTouchEvent(motionEvent);
+        } catch (NullPointerException e) {
+            return false;
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.share,menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            // Respond to the action bar's Up/Home button
+            case android.R.id.home:
+                onBackPressed();
+                return true;
+            case R.id.action_share:
+                Intent i = new Intent(Intent.ACTION_SEND);
+                String txt = "Check this out\n\""+movie.getTitle()+"\"\n\nhttps://www.themoviedb.org/movie/"+movie.getId();
+                i.putExtra(Intent.EXTRA_TEXT,txt);
+                i.setType("text/plain");
+                startActivity(Intent.createChooser(i,"Share \""+ movie.getTitle()+"\""));
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void initActivityTransitions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Slide transition = new Slide();
+            transition.excludeTarget(android.R.id.statusBarBackground, true);
+            getWindow().setEnterTransition(transition);
+            getWindow().setReturnTransition(transition);
+        }
+    }
+
+    public void loadJSON() {
+        int id = movie.getId();
+
+        ApiInterface apiInterface = ApiClient.getRetrofit().create(ApiInterface.class);
+        // get trailer list
+        Call<TrailerList> tCall = apiInterface.getTrailer("movie",id);
+        pbTrailers.setVisibility(View.VISIBLE);
+        tCall.enqueue(new Callback<TrailerList>() {
+            @Override
+            public void onResponse(Call<TrailerList> call, Response<TrailerList> response) {
+                pbTrailers.setVisibility(View.GONE);
+                trailerList = response.body().getResults();
+                TrailerAdapter trailerAdapter = new TrailerAdapter(DetailMovieActivity.this,trailerList);
+                trailerView.setAdapter(trailerAdapter);
+                TextView txt = (TextView) findViewById(R.id.no_trailer);
+                if(trailerList.size()==0) txt.setVisibility(View.VISIBLE);
+            }
+            @Override
+            public void onFailure(Call<TrailerList> call, Throwable t) {
+                pbTrailers.setVisibility(View.GONE);
+            }
+        });
+        // get trailer list
+
+        Call<CastList> cCall = apiInterface.getCast("movie",id);
+        pbCast.setVisibility(View.VISIBLE);
+        cCall.enqueue(new Callback<CastList>() {
+            @Override
+            public void onResponse(Call<CastList> call, Response<CastList> response) {
+                pbCast.setVisibility(View.GONE);
+                castList = response.body().getCast();
+                CastAdapter castAdapter = new CastAdapter(DetailMovieActivity.this,castList);
+                castView.setAdapter(castAdapter);
+                TextView txt = (TextView) findViewById(R.id.no_cast);
+                if(castList.size()==0) txt.setVisibility(View.VISIBLE);
+            }
+            @Override
+            public void onFailure(Call<CastList> call, Throwable t) {
+                pbCast.setVisibility(View.GONE);
+            }
+        });
+
+        //get review
+        Call<ReviewList> rCall = apiInterface.getReview("movie",id);
+        pbReviews.setVisibility(View.VISIBLE);
+        rCall.enqueue(new Callback<ReviewList>() {
+            @Override
+            public void onResponse(Call<ReviewList> call, Response<ReviewList> response) {
+                pbReviews.setVisibility(View.GONE);
+                reviewList = response.body().getResults();
+                ReviewAdapter reviewAdapter = new ReviewAdapter(DetailMovieActivity.this, reviewList);
+                reviewView.setAdapter(reviewAdapter);
+                TextView txt = (TextView) findViewById(R.id.no_review);
+                if(reviewList.size()==0) txt.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onFailure(Call<ReviewList> call, Throwable t) {
+                pbReviews.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    public void cekFavorite(){
+        if (!mDbHelper.isFavorite(movie.getId())){
+            fab.setImageResource(R.drawable.ic_fav_no);
+        } else  {
+            fab.setImageResource(R.drawable.ic_fav_yes);
+        }
+    }
+
+    private void applyPalette(Palette palette) {
+        int primaryDark = Util.getColor(this, R.color.colorPrimaryDark);
+        int primary = Util.getColor(this, R.color.colorPrimary);
+        int lightVibrantColor = palette.getLightVibrantColor(Util.getColor(this, android.R.color.white));
+        int vibrantColor = palette.getVibrantColor(Util.getColor(this, R.color.colorAccent));
+
+        collapsingToolbar.setContentScrimColor(palette.getDarkMutedColor(primaryDark));
+        collapsingToolbar.setStatusBarScrimColor(palette.getDarkMutedColor(primaryDark));
+
+        LinearLayout bar = (LinearLayout) findViewById(R.id.bar);
+//        bar.setBackgroundColor(palette.getDarkMutedColor(primaryDark));
+        bar.setBackgroundColor(lightVibrantColor);
+
+        fab.setRippleColor(lightVibrantColor);
+        fab.setBackgroundTintList(ColorStateList.valueOf(vibrantColor));
+
+        supportStartPostponedEnterTransition();
+    }
+
+    @Override
+    protected void onDestroy() {
+        mDbHelper.close();
+        super.onDestroy();
+    }
+}

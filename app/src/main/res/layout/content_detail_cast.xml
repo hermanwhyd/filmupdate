@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.v4.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context="id.hw.labs.movieupdate.activities.DetailShowsActivity"
+    tools:showIn="@layout/activity_detail_cast">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <!--SYNOPSYS-->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Biography"
+            android:textAppearance="@style/TextAppearance.AppCompat.Widget.Button"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/overview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Biography"
+            android:textAppearance="@style/TextAppearance.AppCompat"
+            android:textStyle="italic" />
+
+        <!--MOVIES-->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Movies"
+            android:textAppearance="@style/TextAppearance.AppCompat.Widget.Button"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/pb_movies"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:theme="@style/AppTheme.CyanAccent"
+            android:visibility="gone"/>
+
+        <android.support.v7.widget.RecyclerView
+            android:id="@+id/movies"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/no_movies"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No movie data"
+            android:textAlignment="center"
+            android:textAppearance="@style/TextAppearance.AppCompat"
+            android:textStyle="italic|bold"
+            android:visibility="gone"/>
+
+        <!--TV SHOWS-->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="tv shows"
+            android:textAppearance="@style/TextAppearance.AppCompat.Widget.Button"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/pb_tv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:theme="@style/AppTheme.CyanAccent"
+            android:visibility="gone"/>
+
+        <android.support.v7.widget.RecyclerView
+            android:id="@+id/tv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/no_tv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No TV Data"
+            android:textAlignment="center"
+            android:textAppearance="@style/TextAppearance.AppCompat"
+            android:textStyle="italic|bold"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+</android.support.v4.widget.NestedScrollView>
